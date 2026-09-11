@@ -313,61 +313,60 @@ class StudyPage extends StatelessWidget {
                 color: palette.surface,
                 padding: const EdgeInsets.fromLTRB(22, 22, 22, 24),
                 radius: palette.radius + 2,
-                child: SizedBox(
-                  height: 430,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          SmallLabel(
-                            item.kind == VocabKind.word ? 'WORD' : 'PHRASE',
-                            color: palette.secondary,
-                          ),
-                          const Spacer(),
-                          _SpeechButton(
-                            state: speechState,
-                            onSpeak: onSpeak,
-                            onStop: onStopSpeaking,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            item.sourceRows.isEmpty
-                                ? '#'
-                                : '#${item.sourceRows.first.toString().padLeft(3, '0')}',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ],
-                      ),
-                      const Spacer(),
-                      GestureDetector(
-                        onTap: speechState == SpeechState.speaking
-                            ? onStopSpeaking
-                            : onSpeak,
-                        child: Text(
-                          item.term,
-                          style: Theme.of(context).textTheme.displaySmall,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        SmallLabel(
+                          item.kind == VocabKind.word ? 'WORD' : 'PHRASE',
+                          color: palette.secondary,
                         ),
-                      ),
-                      if (item.phonetic.isNotEmpty) ...[
-                        const SizedBox(height: 10),
+                        const Spacer(),
+                        _SpeechButton(
+                          state: speechState,
+                          onSpeak: onSpeak,
+                          onStop: onStopSpeaking,
+                        ),
+                        const SizedBox(width: 8),
                         Text(
-                          item.phonetic,
-                          style: Theme.of(context).textTheme.bodyLarge
-                              ?.copyWith(color: palette.accent, fontSize: 17),
+                          item.sourceRows.isEmpty
+                              ? '#'
+                              : '#${item.sourceRows.first.toString().padLeft(3, '0')}',
+                          style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ],
-                      const SizedBox(height: 24),
-                      AnimatedCrossFade(
-                        duration: const Duration(milliseconds: 220),
-                        crossFadeState: revealed
-                            ? CrossFadeState.showSecond
-                            : CrossFadeState.showFirst,
-                        firstChild: _RevealHint(palette: palette),
-                        secondChild: _AnswerBlock(item: item),
+                    ),
+                    const SizedBox(height: 42),
+                    GestureDetector(
+                      onTap: speechState == SpeechState.speaking
+                          ? onStopSpeaking
+                          : onSpeak,
+                      child: Text(
+                        item.term,
+                        style: Theme.of(context).textTheme.displaySmall,
+                      ),
+                    ),
+                    if (item.phonetic.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        item.phonetic,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: palette.accent,
+                          fontSize: 17,
+                        ),
                       ),
                     ],
-                  ),
+                    const SizedBox(height: 24),
+                    AnimatedCrossFade(
+                      duration: const Duration(milliseconds: 220),
+                      crossFadeState: revealed
+                          ? CrossFadeState.showSecond
+                          : CrossFadeState.showFirst,
+                      firstChild: _RevealHint(palette: palette),
+                      secondChild: _AnswerBlock(item: item),
+                    ),
+                  ],
                 ),
               ),
             ),
