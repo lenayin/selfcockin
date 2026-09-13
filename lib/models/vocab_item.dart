@@ -6,12 +6,14 @@ class VocabSense {
     this.partOfSpeech = '',
     this.collocations = '',
     this.example = '',
+    this.exampleTranslation = '',
   });
 
   final String meaning;
   final String partOfSpeech;
   final String collocations;
   final String example;
+  final String exampleTranslation;
 
   factory VocabSense.fromJson(Map<String, dynamic> json) {
     return VocabSense(
@@ -19,6 +21,7 @@ class VocabSense {
       partOfSpeech: json['partOfSpeech'] as String? ?? '',
       collocations: json['collocations'] as String? ?? '',
       example: json['example'] as String? ?? '',
+      exampleTranslation: json['exampleTranslation'] as String? ?? '',
     );
   }
 }
@@ -37,6 +40,7 @@ class VocabItem {
     this.collocations = '',
     this.category = '',
     this.sourceRows = const [],
+    this.exampleTranslation = '',
   });
 
   final String id;
@@ -48,6 +52,7 @@ class VocabItem {
   final String meaning;
   final String collocations;
   final String example;
+  final String exampleTranslation;
   final String category;
   final List<VocabSense> senses;
   final List<int> sourceRows;
@@ -68,6 +73,7 @@ class VocabItem {
       meaning: json['meaning'] as String? ?? '',
       collocations: json['collocations'] as String? ?? '',
       example: json['example'] as String? ?? '',
+      exampleTranslation: json['exampleTranslation'] as String? ?? '',
       category: json['category'] as String? ?? '',
       senses: rawSenses
           .whereType<Map<String, dynamic>>()

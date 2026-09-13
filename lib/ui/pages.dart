@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../models/study_progress.dart';
+import '../models/study_mode.dart';
 import '../models/vocab_item.dart';
 import '../services/speech_service.dart';
 import '../theme/app_theme.dart';
@@ -10,6 +12,13 @@ class DashboardPage extends StatelessWidget {
     required this.seed,
     required this.completedToday,
     required this.newGoal,
+    required this.wordGoal,
+    required this.phraseGoal,
+    required this.reviewCompletedToday,
+    required this.reviewGoal,
+    required this.reviewDueToday,
+    required this.checkinFinished,
+    required this.currentStreak,
     required this.onStartStudy,
     required this.onOpenStylePicker,
     required this.onOpenWordbook,
@@ -19,6 +28,13 @@ class DashboardPage extends StatelessWidget {
   final VocabSeed seed;
   final int completedToday;
   final int newGoal;
+  final int wordGoal;
+  final int phraseGoal;
+  final int reviewCompletedToday;
+  final int reviewGoal;
+  final int reviewDueToday;
+  final bool checkinFinished;
+  final int currentStreak;
   final VoidCallback onStartStudy;
   final VoidCallback onOpenStylePicker;
   final VoidCallback onOpenWordbook;
@@ -26,8 +42,20 @@ class DashboardPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = paletteFrom(context);
-    final progress = completedToday / newGoal;
+    final totalToday = newGoal + reviewGoal;
+    final completedPlan = completedToday + reviewCompletedToday;
+    final progress = totalToday == 0 ? 1.0 : completedPlan / totalToday;
     final daysToExam = _daysUntilExam();
+    final actionLabel = checkinFinished
+        ? '今日已完成'
+        : completedToday >= newGoal
+        ? '开始今日复习'
+        : '开始今日打卡';
+    final actionIcon = checkinFinished
+        ? Icons.check_circle_rounded
+        : completedToday >= newGoal
+        ? Icons.refresh_rounded
+        : Icons.play_arrow_rounded;
 
     return AppPage(
       child: SingleChildScrollView(
@@ -79,7 +107,7 @@ class DashboardPage extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        '$completedToday / $newGoal',
+                        '$completedPlan / $totalToday',
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(
                               color: palette.isDark
@@ -106,8 +134,10 @@ class DashboardPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 15),
                   Text(
-                    completedToday >= newGoal
-                        ? '今天的计划已经完成'
+                    checkinFinished
+                        ? '今天的打卡已经完成'
+                        : completedToday >= newGoal
+                        ? '新词已完成，还有 $reviewDueToday 个待复习。'
                         : '还差 ${newGoal - completedToday} 个新词，保持节奏。',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: palette.isDark
@@ -122,14 +152,14 @@ class DashboardPage extends StatelessWidget {
             Row(
               children: [
                 MetricTile(
-                  value: '18',
+                  value: '$reviewDueToday',
                   label: '待复习',
                   icon: Icons.refresh_rounded,
                   color: palette.secondary,
                 ),
                 const SizedBox(width: 12),
                 MetricTile(
-                  value: '6 天',
+                  value: '$currentStreak 天',
                   label: '连续打卡',
                   icon: Icons.local_fire_department_rounded,
                   color: palette.secondary,
@@ -197,7 +227,7 @@ class DashboardPage extends StatelessWidget {
             _PlanRow(
               icon: Icons.auto_stories_rounded,
               title: '高频单词',
-              detail: '${seed.wordCount} 张卡片 · 今日新学 20 个',
+              detail: '${seed.wordCount} 张卡片 · 今日 $wordGoal 个',
               color: palette.accent,
               onTap: onStartStudy,
             ),
@@ -205,15 +235,15 @@ class DashboardPage extends StatelessWidget {
             _PlanRow(
               icon: Icons.forum_rounded,
               title: '词组搭配',
-              detail: '${seed.phraseCount} 张卡片 · 建议晚间复习',
+              detail: '${seed.phraseCount} 张卡片 · 今日 $phraseGoal 个',
               color: palette.secondary,
               onTap: onOpenWordbook,
             ),
             const SizedBox(height: 22),
             PrimaryAction(
-              label: '开始今日打卡',
-              onPressed: onStartStudy,
-              icon: Icons.play_arrow_rounded,
+              label: actionLabel,
+              onPressed: checkinFinished ? null : onStartStudy,
+              icon: actionIcon,
             ),
             const SizedBox(height: 8),
             Center(
@@ -234,6 +264,10 @@ class StudyPage extends StatelessWidget {
     required this.item,
     required this.completedToday,
     required this.totalToday,
+    required this.sessionLabel,
+    required this.isReviewStage,
+    required this.mode,
+    required this.onModeChanged,
     required this.revealed,
     required this.speechState,
     required this.onSpeak,
@@ -247,6 +281,10 @@ class StudyPage extends StatelessWidget {
   final VocabItem item;
   final int completedToday;
   final int totalToday;
+  final String sessionLabel;
+  final bool isReviewStage;
+  final StudyMode mode;
+  final ValueChanged<StudyMode> onModeChanged;
   final bool revealed;
   final SpeechState speechState;
   final VoidCallback onSpeak;
@@ -258,7 +296,7 @@ class StudyPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = paletteFrom(context);
-    final progress = completedToday / totalToday;
+    final progress = totalToday == 0 ? 1.0 : completedToday / totalToday;
     return AppPage(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 22),
       child: SingleChildScrollView(
@@ -281,7 +319,7 @@ class StudyPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SmallLabel('今日学习'),
+                      SmallLabel(sessionLabel),
                       const SizedBox(height: 4),
                       Text(
                         '$completedToday / $totalToday',
@@ -291,16 +329,36 @@ class StudyPage extends StatelessWidget {
                   ),
                 ),
                 SoftPill(
-                  label: item.kindLabel,
-                  icon: item.kind == VocabKind.word
+                  label: isReviewStage ? '复习阶段' : item.kindLabel,
+                  icon: isReviewStage
+                      ? Icons.refresh_rounded
+                      : item.kind == VocabKind.word
                       ? Icons.auto_stories_rounded
                       : Icons.forum_rounded,
-                  color: item.kind == VocabKind.word
+                  color: isReviewStage
+                      ? palette.secondary
+                      : item.kind == VocabKind.word
                       ? palette.accent
                       : palette.secondary,
-                  backgroundColor: item.kind == VocabKind.word
+                  backgroundColor: isReviewStage
+                      ? palette.secondarySoft
+                      : item.kind == VocabKind.word
                       ? palette.accentSoft
                       : palette.secondarySoft,
+                ),
+                PopupMenuButton<StudyMode>(
+                  tooltip: '切换练习模式',
+                  initialValue: mode,
+                  onSelected: onModeChanged,
+                  icon: const Icon(Icons.tune_rounded),
+                  itemBuilder: (context) => StudyMode.values
+                      .map(
+                        (item) => PopupMenuItem<StudyMode>(
+                          value: item,
+                          child: Text(item.label),
+                        ),
+                      )
+                      .toList(),
                 ),
               ],
             ),
@@ -343,11 +401,12 @@ class StudyPage extends StatelessWidget {
                           ? onStopSpeaking
                           : onSpeak,
                       child: Text(
-                        item.term,
+                        _promptForMode(item, mode),
                         style: Theme.of(context).textTheme.displaySmall,
                       ),
                     ),
-                    if (item.phonetic.isNotEmpty) ...[
+                    if (mode == StudyMode.flashcard &&
+                        item.phonetic.isNotEmpty) ...[
                       const SizedBox(height: 10),
                       Text(
                         item.phonetic,
@@ -364,7 +423,7 @@ class StudyPage extends StatelessWidget {
                           ? CrossFadeState.showSecond
                           : CrossFadeState.showFirst,
                       firstChild: _RevealHint(palette: palette),
-                      secondChild: _AnswerBlock(item: item),
+                      secondChild: _AnswerBlock(item: item, mode: mode),
                     ),
                   ],
                 ),
@@ -372,11 +431,13 @@ class StudyPage extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             if (!revealed)
-              PrimaryAction(
-                label: '显示释义',
-                onPressed: onReveal,
-                icon: Icons.visibility_rounded,
-              )
+              mode == StudyMode.spelling
+                  ? _SpellingInput(item: item, onSubmit: onReveal)
+                  : PrimaryAction(
+                      label: _revealLabel(mode),
+                      onPressed: onReveal,
+                      icon: Icons.visibility_rounded,
+                    )
             else
               _RatingGrid(onRate: onRate),
             const SizedBox(height: 18),
@@ -465,7 +526,8 @@ class _WordbookPageState extends State<WordbookPage> {
               query.isEmpty ||
               item.term.toLowerCase().contains(query) ||
               item.meaning.toLowerCase().contains(query) ||
-              item.collocations.toLowerCase().contains(query);
+              item.collocations.toLowerCase().contains(query) ||
+              item.exampleTranslation.toLowerCase().contains(query);
           return matchesFilter && matchesQuery;
         })
         .take(60)
@@ -635,6 +697,17 @@ class _WordbookPageState extends State<WordbookPage> {
                       fontStyle: FontStyle.italic,
                     ),
                   ),
+                  if (item.exampleTranslation.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    SmallLabel('中文翻译', color: palette.accent),
+                    const SizedBox(height: 3),
+                    Text(
+                      item.exampleTranslation,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: palette.ink),
+                    ),
+                  ],
                 ],
               ],
             ),
@@ -646,13 +719,42 @@ class _WordbookPageState extends State<WordbookPage> {
 }
 
 class StatsPage extends StatelessWidget {
-  const StatsPage({required this.seed, super.key});
+  const StatsPage({
+    required this.seed,
+    required this.totalLearned,
+    required this.masteredCount,
+    required this.currentStreak,
+    required this.longestStreak,
+    required this.todayStudySeconds,
+    required this.dailyGoal,
+    required this.weeklyStats,
+    super.key,
+  });
 
   final VocabSeed seed;
+  final int totalLearned;
+  final int masteredCount;
+  final int currentStreak;
+  final int longestStreak;
+  final int todayStudySeconds;
+  final int dailyGoal;
+  final List<DailyStudyStat> weeklyStats;
 
   @override
   Widget build(BuildContext context) {
     final palette = paletteFrom(context);
+    final totalCards = seed.items.length;
+    final masteryPercent = totalCards == 0
+        ? 0
+        : (masteredCount / totalCards * 100).round().clamp(0, 100);
+    final maxCompleted = weeklyStats.fold<int>(
+      dailyGoal,
+      (max, item) => item.completed > max ? item.completed : max,
+    );
+    final weeklyCompleted = weeklyStats.fold<int>(
+      0,
+      (total, item) => total + item.completed,
+    );
     return AppPage(
       child: SingleChildScrollView(
         child: Column(
@@ -665,14 +767,14 @@ class StatsPage extends StatelessWidget {
             Row(
               children: [
                 MetricTile(
-                  value: '143',
+                  value: '$totalLearned',
                   label: '累计学习',
                   icon: Icons.menu_book_rounded,
                   color: palette.accent,
                 ),
                 const SizedBox(width: 12),
                 MetricTile(
-                  value: '72%',
+                  value: '$masteryPercent%',
                   label: '掌握进度',
                   icon: Icons.track_changes_rounded,
                   color: palette.secondary,
@@ -683,14 +785,14 @@ class StatsPage extends StatelessWidget {
             Row(
               children: [
                 MetricTile(
-                  value: '6 天',
+                  value: '$longestStreak 天',
                   label: '最长连续',
                   icon: Icons.local_fire_department_rounded,
                   color: palette.secondary,
                 ),
                 const SizedBox(width: 12),
                 MetricTile(
-                  value: '12m',
+                  value: _formatDuration(todayStudySeconds),
                   label: '今日用时',
                   icon: Icons.timer_outlined,
                   color: palette.accent,
@@ -700,7 +802,10 @@ class StatsPage extends StatelessWidget {
             const SizedBox(height: 26),
             SectionHeading(
               title: '最近 7 天',
-              action: SoftPill(label: '目标 20 / 天', icon: Icons.flag_rounded),
+              action: SoftPill(
+                label: '目标 $dailyGoal / 天',
+                icon: Icons.flag_rounded,
+              ),
             ),
             const SizedBox(height: 13),
             AppCard(
@@ -712,15 +817,18 @@ class StatsPage extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: const [
-                        _WeekBar(day: '一', value: .4),
-                        _WeekBar(day: '二', value: .72),
-                        _WeekBar(day: '三', value: .56),
-                        _WeekBar(day: '四', value: .9, active: true),
-                        _WeekBar(day: '五', value: .65),
-                        _WeekBar(day: '六', value: .28),
-                        _WeekBar(day: '日', value: .48),
-                      ],
+                      children: weeklyStats
+                          .map(
+                            (item) => _WeekBar(
+                              day: _weekdayLabel(item.dateKey),
+                              value: maxCompleted == 0
+                                  ? 0
+                                  : item.completed / maxCompleted,
+                              active: item.dateKey == weeklyStats.last.dateKey,
+                              completed: item.completed,
+                            ),
+                          )
+                          .toList(),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -734,7 +842,7 @@ class StatsPage extends StatelessWidget {
                       const SizedBox(width: 7),
                       Expanded(
                         child: Text(
-                          '本周已完成 98 个词条，保持每天一点点。',
+                          '最近 7 天已完成 $weeklyCompleted 个词条，保持每天一点点。',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                       ),
@@ -753,14 +861,16 @@ class StatsPage extends StatelessWidget {
                   _DistributionRow(
                     label: '高频单词',
                     value: '${seed.wordCount}',
-                    progress: .78,
+                    progress: totalCards == 0 ? 0 : seed.wordCount / totalCards,
                     color: palette.accent,
                   ),
                   const SizedBox(height: 18),
                   _DistributionRow(
                     label: '词组搭配',
                     value: '${seed.phraseCount}',
-                    progress: .36,
+                    progress: totalCards == 0
+                        ? 0
+                        : seed.phraseCount / totalCards,
                     color: palette.secondary,
                   ),
                 ],
@@ -776,12 +886,34 @@ class StatsPage extends StatelessWidget {
 class SettingsPage extends StatelessWidget {
   const SettingsPage({
     required this.style,
+    required this.dailyNewGoal,
+    required this.phraseRatioPercent,
+    required this.dailyReviewLimit,
+    required this.reminderTime,
     required this.onStyleChanged,
+    required this.onEditDailyNewGoal,
+    required this.onEditPhraseRatio,
+    required this.onEditDailyReviewLimit,
+    required this.onEditReminder,
+    required this.onExportRecord,
+    required this.onRestoreRecord,
+    required this.onResetProgress,
     super.key,
   });
 
   final AppStyle style;
+  final int dailyNewGoal;
+  final int phraseRatioPercent;
+  final int dailyReviewLimit;
+  final TimeOfDay reminderTime;
   final ValueChanged<AppStyle> onStyleChanged;
+  final VoidCallback onEditDailyNewGoal;
+  final VoidCallback onEditPhraseRatio;
+  final VoidCallback onEditDailyReviewLimit;
+  final VoidCallback onEditReminder;
+  final VoidCallback onExportRecord;
+  final VoidCallback onRestoreRecord;
+  final VoidCallback onResetProgress;
 
   @override
   Widget build(BuildContext context) {
@@ -818,22 +950,33 @@ class SettingsPage extends StatelessWidget {
                   _SettingRow(
                     icon: Icons.add_circle_outline_rounded,
                     title: '每日新词',
-                    value: '20 个',
+                    value: '$dailyNewGoal 个',
                     color: palette.accent,
+                    onTap: onEditDailyNewGoal,
+                  ),
+                  Divider(height: 1, color: palette.line),
+                  _SettingRow(
+                    icon: Icons.forum_outlined,
+                    title: '词组占比',
+                    value: '$phraseRatioPercent%',
+                    color: palette.secondary,
+                    onTap: onEditPhraseRatio,
                   ),
                   Divider(height: 1, color: palette.line),
                   _SettingRow(
                     icon: Icons.refresh_rounded,
                     title: '每日复习上限',
-                    value: '50 个',
+                    value: '$dailyReviewLimit 个',
                     color: palette.secondary,
+                    onTap: onEditDailyReviewLimit,
                   ),
                   Divider(height: 1, color: palette.line),
                   _SettingRow(
                     icon: Icons.notifications_none_rounded,
                     title: '每日提醒',
-                    value: '20:30',
+                    value: reminderTime.format(context),
                     color: palette.accent,
+                    onTap: onEditReminder,
                   ),
                 ],
               ),
@@ -851,6 +994,15 @@ class SettingsPage extends StatelessWidget {
                     title: '导出学习记录',
                     value: '',
                     color: palette.accent,
+                    onTap: onExportRecord,
+                  ),
+                  Divider(height: 1, color: palette.line),
+                  _SettingRow(
+                    icon: Icons.upload_rounded,
+                    title: '恢复学习记录',
+                    value: '',
+                    color: palette.accent,
+                    onTap: onRestoreRecord,
                   ),
                   Divider(height: 1, color: palette.line),
                   _SettingRow(
@@ -858,6 +1010,7 @@ class SettingsPage extends StatelessWidget {
                     title: '重新开始',
                     value: '',
                     color: palette.secondary,
+                    onTap: onResetProgress,
                   ),
                 ],
               ),
@@ -949,9 +1102,10 @@ class _RevealHint extends StatelessWidget {
 }
 
 class _AnswerBlock extends StatelessWidget {
-  const _AnswerBlock({required this.item});
+  const _AnswerBlock({required this.item, required this.mode});
 
   final VocabItem item;
+  final StudyMode mode;
 
   @override
   Widget build(BuildContext context) {
@@ -959,6 +1113,24 @@ class _AnswerBlock extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (mode != StudyMode.flashcard) ...[
+          Text(
+            item.term,
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          if (item.phonetic.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              item.phonetic,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(color: palette.accent),
+            ),
+          ],
+          const SizedBox(height: 12),
+        ],
         Text(
           item.meaning.isEmpty ? '暂无释义' : item.meaning,
           style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 21),
@@ -993,9 +1165,122 @@ class _AnswerBlock extends StatelessWidget {
               fontStyle: FontStyle.italic,
             ),
           ),
+          if (item.exampleTranslation.isNotEmpty) ...[
+            const SizedBox(height: 7),
+            SmallLabel('中文翻译', color: palette.accent),
+            const SizedBox(height: 3),
+            Text(
+              item.exampleTranslation,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: palette.ink),
+            ),
+          ],
         ],
       ],
     );
+  }
+}
+
+class _SpellingInput extends StatefulWidget {
+  const _SpellingInput({required this.item, required this.onSubmit});
+
+  final VocabItem item;
+  final VoidCallback onSubmit;
+
+  @override
+  State<_SpellingInput> createState() => _SpellingInputState();
+}
+
+class _SpellingInputState extends State<_SpellingInput> {
+  final _controller = TextEditingController();
+  bool _submitted = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = paletteFrom(context);
+    final answer = _controller.text.trim().toLowerCase();
+    final correct = answer == widget.item.term.trim().toLowerCase();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _controller,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          onChanged: (_) => setState(() => _submitted = false),
+          onSubmitted: (_) => _submit(),
+          decoration: const InputDecoration(
+            hintText: '输入英文拼写',
+            prefixIcon: Icon(Icons.keyboard_rounded),
+          ),
+        ),
+        const SizedBox(height: 10),
+        PrimaryAction(
+          label: '检查拼写',
+          icon: Icons.check_rounded,
+          onPressed: _submit,
+        ),
+        if (_submitted) ...[
+          const SizedBox(height: 8),
+          Text(
+            correct ? '拼写正确' : '正确答案：${widget.item.term}',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: correct ? palette.accent : palette.secondary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  void _submit() {
+    if (_controller.text.trim().isEmpty) {
+      return;
+    }
+    setState(() => _submitted = true);
+    widget.onSubmit();
+  }
+}
+
+String _promptForMode(VocabItem item, StudyMode mode) {
+  switch (mode) {
+    case StudyMode.flashcard:
+      return item.term;
+    case StudyMode.translation:
+    case StudyMode.spelling:
+      return item.meaning.isEmpty ? '暂无释义' : item.meaning;
+    case StudyMode.cloze:
+      return _clozeExample(item);
+  }
+}
+
+String _clozeExample(VocabItem item) {
+  if (item.example.isEmpty) {
+    return item.meaning.isEmpty ? '暂无例句' : item.meaning;
+  }
+  final pattern = RegExp(RegExp.escape(item.term), caseSensitive: false);
+  final replaced = item.example.replaceFirst(pattern, '______');
+  return replaced == item.example ? '${item.example}\n\n（请回忆目标词）' : replaced;
+}
+
+String _revealLabel(StudyMode mode) {
+  switch (mode) {
+    case StudyMode.flashcard:
+      return '显示释义';
+    case StudyMode.translation:
+      return '显示英文';
+    case StudyMode.spelling:
+      return '显示答案';
+    case StudyMode.cloze:
+      return '显示完整例句';
   }
 }
 
@@ -1170,10 +1455,16 @@ class _VocabListTile extends StatelessWidget {
 }
 
 class _WeekBar extends StatelessWidget {
-  const _WeekBar({required this.day, required this.value, this.active = false});
+  const _WeekBar({
+    required this.day,
+    required this.value,
+    required this.completed,
+    this.active = false,
+  });
 
   final String day;
   final double value;
+  final int completed;
   final bool active;
 
   @override
@@ -1185,12 +1476,15 @@ class _WeekBar extends StatelessWidget {
         Expanded(
           child: Align(
             alignment: Alignment.bottomCenter,
-            child: Container(
-              width: 22,
-              height: 118 * value,
-              decoration: BoxDecoration(
-                color: active ? palette.accent : palette.accentSoft,
-                borderRadius: BorderRadius.circular(9),
+            child: Tooltip(
+              message: '$completed 个词条',
+              child: Container(
+                width: 22,
+                height: 118 * value.clamp(0, 1),
+                decoration: BoxDecoration(
+                  color: active ? palette.accent : palette.accentSoft,
+                  borderRadius: BorderRadius.circular(9),
+                ),
               ),
             ),
           ),
@@ -1206,6 +1500,23 @@ class _WeekBar extends StatelessWidget {
       ],
     );
   }
+}
+
+String _weekdayLabel(String dateKey) {
+  final date = DateTime.parse(dateKey);
+  const labels = ['一', '二', '三', '四', '五', '六', '日'];
+  return labels[date.weekday - 1];
+}
+
+String _formatDuration(int seconds) {
+  if (seconds < 60) {
+    return '${seconds}s';
+  }
+  final minutes = seconds ~/ 60;
+  if (minutes < 60) {
+    return '${minutes}m';
+  }
+  return '${minutes ~/ 60}h ${minutes % 60}m';
 }
 
 class _DistributionRow extends StatelessWidget {
@@ -1343,30 +1654,42 @@ class _SettingRow extends StatelessWidget {
     required this.title,
     required this.value,
     required this.color,
+    required this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String value;
   final Color color;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final palette = paletteFrom(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 21),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(title, style: Theme.of(context).textTheme.titleMedium),
+    return Semantics(
+      button: true,
+      label: title,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 21),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              if (value.isNotEmpty)
+                Text(value, style: Theme.of(context).textTheme.bodyMedium),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded, color: palette.muted),
+            ],
           ),
-          if (value.isNotEmpty)
-            Text(value, style: Theme.of(context).textTheme.bodyMedium),
-          const SizedBox(width: 8),
-          Icon(Icons.chevron_right_rounded, color: palette.muted),
-        ],
+        ),
       ),
     );
   }

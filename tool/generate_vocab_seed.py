@@ -1,3 +1,4 @@
+import argparse
 import json
 from collections import OrderedDict
 from datetime import datetime
@@ -9,6 +10,7 @@ from openpyxl import load_workbook
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "上海自考13000英语专升本_高频单词及词组_2026下半年.xlsx"
 OUTPUT = ROOT / "assets" / "data" / "vocab_seed.json"
+TRANSLATIONS = ROOT / "assets" / "data" / "example_translations_zh.json"
 
 
 def text(value):
@@ -29,7 +31,14 @@ def unique_values(values):
     return result
 
 
-def collect_words(sheet):
+def load_example_translations():
+    if not TRANSLATIONS.exists():
+        return {}
+    with TRANSLATIONS.open(encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def collect_words(sheet, translations):
     groups = OrderedDict()
     source_rows = 0
     blank_collocations = 0
@@ -67,6 +76,7 @@ def collect_words(sheet):
                 "meaning": text(meaning),
                 "collocations": text(collocations),
                 "example": text(example),
+                "exampleTranslation": translations.get(text(example), ""),
             }
         )
 
@@ -85,6 +95,7 @@ def collect_words(sheet):
             (sense["example"] for sense in item["senses"] if sense["example"]),
             "",
         )
+        item["exampleTranslation"] = translations.get(item["example"], "")
         item["partOfSpeech"] = " / ".join(
             unique_values(
                 sense["partOfSpeech"]
@@ -96,7 +107,7 @@ def collect_words(sheet):
     return list(groups.values()), source_rows, blank_collocations
 
 
-def collect_phrases(sheet):
+def collect_phrases(sheet, translations):
     groups = OrderedDict()
     source_rows = 0
 
@@ -129,6 +140,7 @@ def collect_phrases(sheet):
             {
                 "meaning": text(meaning),
                 "example": text(example),
+                "exampleTranslation": translations.get(text(example), ""),
             }
         )
 
@@ -140,6 +152,7 @@ def collect_phrases(sheet):
             (sense["example"] for sense in item["senses"] if sense["example"]),
             "",
         )
+        item["exampleTranslation"] = translations.get(item["example"], "")
 
     return list(groups.values()), source_rows
 
@@ -155,17 +168,48 @@ def collect_exam_info(sheet):
 
 
 def main():
-    workbook = load_workbook(SOURCE, read_only=True, data_only=True)
-    words, word_source_count, blank_collocations = collect_words(
-        workbook["高频单词(900)"]
+    parser = argparse.ArgumentParser(
+        description="Convert the annual vocabulary workbook into app JSON."
     )
-    phrases, phrase_source_count = collect_phrases(workbook["高频词组搭配"])
+    parser.add_argument(
+        "--source",
+        type=Path,
+        default=SOURCE,
+        help="Path to the annual Excel workbook.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=OUTPUT,
+        help="Output path for vocab_seed.json.",
+    )
+    parser.add_argument(
+        "--translations",
+        type=Path,
+        default=TRANSLATIONS,
+        help="Optional example translation JSON file.",
+    )
+    args = parser.parse_args()
+
+    workbook = load_workbook(args.source, read_only=True, data_only=True)
+    translations = {}
+    if args.translations.exists():
+        with args.translations.open(encoding="utf-8") as handle:
+            translations = json.load(handle)
+    words, word_source_count, blank_collocations = collect_words(
+        workbook["高频单词(900)"],
+        translations,
+    )
+    phrases, phrase_source_count = collect_phrases(
+        workbook["高频词组搭配"],
+        translations,
+    )
     exam_info = collect_exam_info(workbook["考试信息与备考指南"])
 
     payload = {
         "version": "2026-second-half",
         "generatedAt": datetime.now().isoformat(timespec="seconds"),
-        "sourceFile": SOURCE.name,
+            "sourceFile": args.source.name,
         "metadata": {
             "title": "上海自考 13000 英语（专升本）",
             "subtitle": "2026年下半年 · 高频单词及词组",
@@ -182,8 +226,8 @@ def main():
         "items": words + phrases,
     }
 
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
